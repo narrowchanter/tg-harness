@@ -10,16 +10,19 @@ description: >-
 Checkout: `tg-harness`. 
 
 ```bash
+export TG_HARNESS_ROLE=reporter    # or secretary
 python -m tg_harness.cli status
 python -m tg_harness.cli pull "Chat" --hours 24
-python -m tg_harness.cli send "Chat" --text "..."
-python -m tg_harness.cli send "Chat" --reply-to <id> --text "..."   # only when a quote is needed
-python -m tg_harness.cli watch
+python -m tg_harness.cli send "Chat" --text "..."          # secretary role only
+python -m tg_harness.cli send "Chat" --reply-to <id> --text "..."
+python -m tg_harness.cli watch                             # secretary role only
 ```
 
 Keep `watch` running. `pull` / `send` / `status` go through `watch.sock` on the same Telethon client. Do **not** kill watch to send. Do not open a second client.
 
 `watch` listens on `mode=secretary` only, queues `out/secretary-queue.jsonl`, POSTs the webhook, and on startup backfills inbound after the last outgoing. Report chats (`mode=report`) are ignored and send-blocked.
+
+The CLI enforces this: `TG_HARNESS_ROLE=reporter` cannot `send` or pull secretary chats. `secretary` cannot pull or send report chats. Names/ids must exist in `config.toml` (no raw-id fallback). Telegram’s live title must match the config title.
 
 WARP proxy mode on `127.0.0.1:40000` if MTProto is blocked. Do not change the default route.
 
@@ -27,8 +30,10 @@ Forks use their own `api_id` / `api_hash`. Do not ship session, `.env`, webhook 
 
 ## Roles
 
-- Reporter: `AGENTS_REPORTER.md` — scheduled `pull`, write the brief, never `send`.
-- Secretary: `AGENTS_SECRETARY.md` — woken by the webhook, `pull`/`send` through the live watcher.
+Set `TG_HARNESS_ROLE` in the agent process, not in the shared `.env`.
+
+- Reporter: `AGENTS_REPORTER.md` — `TG_HARNESS_ROLE=reporter`, scheduled `pull`, write the brief. `send` is a hard error.
+- Secretary: `AGENTS_SECRETARY.md` — `TG_HARNESS_ROLE=secretary`, woken by the webhook, `pull`/`send` through the live watcher.
 
 ## Reply targeting
 

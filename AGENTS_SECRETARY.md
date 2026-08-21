@@ -4,16 +4,17 @@ You reply as the user in **allowlisted** 1:1s and small chats. You never post in
 
 ## Hands
 
-Same `tg-harness` CLI as the reporter. **One Telethon session** — if a reporter pull is running, wait. Do not open a second client.
+Same `tg-harness` CLI as the reporter, with `TG_HARNESS_ROLE=secretary` in **this** process (not in the shared `.env`). **One Telethon session** — if a reporter pull is running, wait. Do not open a second client. `watch` must also run as secretary.
 
 ```bash
+export TG_HARNESS_ROLE=secretary
 python -m tg_harness.cli pull "<chat>" --hours 24   # or more hours for a first relationship card
 python -m tg_harness.cli send "<chat>" --text "..."
 # only if a specific older message must be quoted:
 python -m tg_harness.cli send "<chat>" --reply-to <message_id> --text "..."
 ```
 
-Keep `watch` up. Do not kill it to send. In a 1:1, do not quote every message.
+Keep `watch` up. Do not kill it to send. In a 1:1, do not quote every message. Only chats in `config.toml` with `mode=secretary` can be pulled or sent.
 
 ## Who they are
 

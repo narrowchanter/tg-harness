@@ -41,15 +41,22 @@ SMS/app code, then 2FA if asked. Writes `user.session`. Never commit it, never p
 
 ## Commands
 
+Role is **per process**, not in the shared `.env` / `config.toml`:
+
+```bash
+export TG_HARNESS_ROLE=reporter    # pull mode=report only; send is a hard error
+export TG_HARNESS_ROLE=secretary   # pull/send mode=secretary only; required for watch
+```
+
 ```bash
 python -m tg_harness.cli status
 python -m tg_harness.cli chats
 python -m tg_harness.cli pull "Example group" --hours 24
-python -m tg_harness.cli send "Example friend" --text "hello"
-python -m tg_harness.cli watch
+TG_HARNESS_ROLE=secretary python -m tg_harness.cli send "Example friend" --text "hello"
+TG_HARNESS_ROLE=secretary python -m tg_harness.cli watch
 ```
 
-Keep `watch` running. `pull` / `send` / `status` go through `watch.sock` so you never open a second Telethon client. `send` refuses `mode=report` chats. In 1:1s omit `--reply-to` unless a quote is needed. `watch` POSTs secretary inbound to `webhook_url` / `SECRETARY_WEBHOOK_URL`.
+Keep `watch` running (secretary role). `pull` / `send` / `status` go through `watch.sock` so you never open a second Telethon client. Unknown chats are refused. Reporter cannot `send` and cannot pull secretary chats. Secretary cannot pull or send report chats. Live Telegram titles must match `config.toml`. `send` with watch down needs `--direct` (human escape). In 1:1s omit `--reply-to` unless a quote is needed. `watch` POSTs secretary inbound to `webhook_url` / `SECRETARY_WEBHOOK_URL`.
 
 ## Two agents
 
