@@ -1,0 +1,13 @@
+[project]
+name = "tg-harness"
+version = "0.1.0"
+description = "Thin Telethon CLI: login, pull, send. Agents write reports and replies."
+requires-python = ">=3.12"
+dependencies = [
+  "telethon>=1.36",
+  "python-socks[asyncio]>=2.5",
+  "python-dotenv>=1.0",
+]
+
+[project.scripts]
+tg = "tg_harness.cli:main"

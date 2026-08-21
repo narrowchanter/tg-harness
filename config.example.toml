@@ -1,0 +1,18 @@
+# Copy to config.toml (gitignored). Do not commit real chat ids if you care.
+
+timezone = "UTC"
+proxy_host = "127.0.0.1"
+proxy_port = 40000
+session_path = "user.session"
+# webhook_url = "https://… from the secretary routine panel"
+
+# [[chats]]
+# id = 123456789
+# title = "Example group"
+# mode = "report"          # report = pull only
+#
+# [[chats]]
+# id = 987654321
+# title = "Example friend"
+# mode = "secretary"       # secretary = may send
+# auto = false             # true = send without asking if one clear target

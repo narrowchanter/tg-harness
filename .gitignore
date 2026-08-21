@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+config.toml
+*.session
+*.session-journal
+__pycache__/
+.venv/
+venv/
+out/
+*.json
+!config.example.toml
+user.session.string
+watch.sock
+watch.pid
+.DS_Store
+*.session.string
