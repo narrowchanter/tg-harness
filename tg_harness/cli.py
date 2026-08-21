@@ -105,11 +105,20 @@ def require_chat(cfg: dict, raw: str) -> dict:
 
 
 def live_title(entity) -> str:
-    return getattr(entity, "title", None) or " ".join(
+    if entity is None:
+        return ""
+    title = getattr(entity, "title", None)
+    if title:
+        return str(title)
+    name = " ".join(
         p
         for p in [getattr(entity, "first_name", None), getattr(entity, "last_name", None)]
         if p
     )
+    if name:
+        return name
+    username = getattr(entity, "username", None)
+    return str(username) if username else ""
 
 
 def guard_entity(chat: dict, entity) -> None:
@@ -161,13 +170,10 @@ async def sender_bits(msg) -> tuple[str, str]:
     try:
         sender = await msg.get_sender()
         sender_id = str(getattr(sender, "id", "") or "")
-        sender_name = " ".join(
-            p
-            for p in [getattr(sender, "first_name", None), getattr(sender, "last_name", None)]
-            if p
-        ) or (getattr(sender, "username", None) or "")
+        sender_name = live_title(sender)
     except Exception:
         sender_id = str(getattr(getattr(msg, "from_id", None), "user_id", "") or "")
+        sender_name = live_title(getattr(msg, "sender", None))
     if msg.out and not sender_name:
         sender_name = "me"
     return sender_id, sender_name
@@ -185,12 +191,12 @@ def write_pull_files(out: dict, out_dir: Path) -> tuple[Path, Path]:
     txt_path = out_dir / f"{chat_id}.txt"
     json_path.write_text(json.dumps(out, ensure_ascii=False, indent=2))
     lines = [
-        f"chat_id={chat_id} title={out['title']} count={out['count']} "
+        f"title={out['title']} count={out['count']} "
         f"window={out['window_start']} -> {out['window_end']}"
     ]
     for m in out["messages"]:
         stamp = datetime.fromisoformat(m["date"]).strftime("%Y-%m-%d %H:%M")
-        who = "me" if m["is_outgoing"] else (m["sender_name"] or "them")
+        who = "me" if m["is_outgoing"] else (m["sender_name"] or out.get("title") or "them")
         text = " ".join((m["text"] or "").split())
         if len(text) > 400:
             text = text[:400] + "…"
@@ -226,6 +232,7 @@ async def pull_chat(
     if entity is None:
         raise last_err or RuntimeError(f"could not resolve chat {chat_id}")
     guard_entity(chat, entity)
+    live = live_title(entity)
     raw = await client.get_messages(entity, limit=limit, offset_date=end)
     messages = []
     for msg in raw:
@@ -238,6 +245,8 @@ async def pull_chat(
         if not text and not keep_empty:
             continue
         sender_id, sender_name = await sender_bits(msg)
+        if not sender_name and not msg.out:
+            sender_name = live
         messages.append(
             {
                 "id": msg.id,
@@ -252,7 +261,7 @@ async def pull_chat(
     messages.sort(key=lambda m: m["date"])
     return {
         "chat_id": chat_id,
-        "title": chat.get("title"),
+        "title": live or chat.get("title"),
         "mode": chat.get("mode"),
         "window_start": start.isoformat(),
         "window_end": end.isoformat(),
@@ -462,11 +471,11 @@ async def cmd_watch(cfg: dict, args: argparse.Namespace) -> None:
         out.mkdir(exist_ok=True)
         with (out / "secretary-queue.jsonl").open("a") as fh:
             fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
-        print("queued", payload["chat_id"], mid, flush=True)
+        print("queued", payload.get("title") or payload.get("from"), mid, flush=True)
         if not webhook:
             return
         status = await asyncio.to_thread(post_webhook, url, key, payload)
-        print("webhook_" + status, payload["chat_id"], mid, flush=True)
+        print("webhook_" + status, payload.get("title") or payload.get("from"), mid, flush=True)
 
     def match_secretary(raw_id: int, chat_id: int):
         for cid, meta in allow.items():
@@ -482,11 +491,13 @@ async def cmd_watch(cfg: dict, args: argparse.Namespace) -> None:
         if hit is None or event.out:
             return
         cid, meta = hit
+        from_name = live_title(await event.get_sender()) or live_title(event.chat) or meta.get("title")
         await emit(
             {
                 "type": "secretary_inbound",
                 "chat_id": cid,
-                "title": meta.get("title"),
+                "title": live_title(event.chat) or meta.get("title"),
+                "from": from_name,
                 "message_id": event.id,
                 "text": (event.raw_text or "")[:500],
                 "reply_to_msg_id": getattr(getattr(event, "reply_to", None), "reply_to_msg_id", None),
@@ -508,7 +519,8 @@ async def cmd_watch(cfg: dict, args: argparse.Namespace) -> None:
                     {
                         "type": "secretary_inbound",
                         "chat_id": cid,
-                        "title": meta.get("title"),
+                        "title": out.get("title") or meta.get("title"),
+                        "from": m.get("sender_name") or out.get("title") or meta.get("title"),
                         "message_id": m["id"],
                         "text": (m["text"] or "")[:500],
                         "reply_to_msg_id": m.get("reply_to_msg_id"),

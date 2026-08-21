@@ -1,5 +1,6 @@
 import unittest
 
+from tg_harness.cli import live_title
 from tg_harness.policy import (
     PolicyError,
     chat_by_id,
@@ -83,6 +84,21 @@ class PullSendTests(unittest.TestCase):
         friend = resolve_chat(CFG, "Example friend")
         self.assertIsNotNone(refuse_live_title(friend, "Someone else"))
         self.assertIsNone(refuse_live_title(friend, "example friend"))
+
+
+class LiveNameTests(unittest.TestCase):
+    def test_name_not_id(self):
+        class User:
+            id = 99
+            first_name = "Ada"
+            last_name = "Lovelace"
+
+        class IdOnly:
+            id = 99
+
+        self.assertEqual(live_title(User()), "Ada Lovelace")
+        self.assertEqual(live_title(IdOnly()), "")
+        self.assertEqual(live_title(None), "")
 
 
 if __name__ == "__main__":
