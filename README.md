@@ -2,6 +2,47 @@
 
 Thin Telegram I/O for **Grok Bot**. Two agents share one checkout and one Telethon session. You write the briefs and the replies. This CLI only logs in, pulls, sends, and watches.
 
+## Example: one group, one friend, two Groks
+
+Say Telegram has two chats you care about:
+
+| Chat | `config.toml` mode | Which Grok | What it is allowed to do |
+| --- | --- | --- | --- |
+| `AI News` (a group) | `mode = "report"` | **Reporter** | `pull` the last 24h and write a brief in Grok chat. Cannot `send`. Cannot even `pull` the friend chat. |
+| `Sam` (a 1:1) | `mode = "secretary"` | **Secretary** | `watch` for new messages, then `pull` / `send` as you. Cannot `pull` or `send` in `AI News`. |
+
+```toml
+[[chats]]
+id = 111111111
+title = "AI News"
+mode = "report"
+
+[[chats]]
+id = 222222222
+title = "Sam"
+mode = "secretary"
+```
+
+```mermaid
+flowchart LR
+  TG[Telegram]
+  W[watch under supervise.sh]
+  R[Reporter Grok]
+  S[Secretary Grok]
+  TG -->|NewMessage on Sam| W
+  W -->|webhook| S
+  S -->|send as you| TG
+  R -->|pull AI News via watch.sock| W
+  W -->|history| R
+  R -->|brief in Grok chat only| You[You]
+```
+
+**Reporter mode** (`TG_HARNESS_ROLE=reporter`): a weekday routine. `pull "AI News" --hours 24`, read `out/<id>.txt`, write the newsletter. If it tries `send`, or `pull "Sam"`, the CLI exits. It never opens Telethon itself; the request goes through `watch.sock`.
+
+**Secretary mode** (`TG_HARNESS_ROLE=secretary`): `watch` stays up. Sam texts → webhook wakes the secretary Grok → it `pull`s Sam, drafts in your voice, `send`s. It must not touch `AI News`. Keep `watch` supervised or it dies overnight and Sam's texts never arrive.
+
+Role is the **process** env var, not a line in `.env`. Same files, two Groks, opposite allowlists.
+
 ## Grok Bot setup
 
 Point **two different Groks** at the same checkout. Role is per process (`TG_HARNESS_ROLE`), never in the shared `.env`.
