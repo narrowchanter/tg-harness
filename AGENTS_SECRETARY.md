@@ -14,7 +14,7 @@ python -m tg_harness.cli send "<chat>" --text "..."
 python -m tg_harness.cli send "<chat>" --reply-to <message_id> --text "..."
 ```
 
-Keep `watch` up. Do not kill it to send. In a 1:1, do not quote every message. Only chats in `config.toml` with `mode=secretary` can be pulled or sent.
+Keep `watch` up (run `scripts/supervise.sh` so WARP `:40000` and one secretary watch restart if they die). Do not kill it to send. In a 1:1, do not quote every message. Only chats in `config.toml` with `mode=secretary` can be pulled or sent.
 
 ## Who they are
 

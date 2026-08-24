@@ -18,7 +18,7 @@ python -m tg_harness.cli send "Chat" --reply-to <id> --text "..."
 python -m tg_harness.cli watch                             # secretary role only
 ```
 
-Keep `watch` running. `pull` / `send` / `status` go through `watch.sock` on the same Telethon client. Do **not** kill watch to send. Do not open a second client.
+Keep `watch` running (supervise it with `scripts/supervise.sh` or it dies overnight and the secretary never wakes). `watch.sock` is request/response Unix IPC, not a WebSocket. The Telegram pipe is Telethon. `pull` / `send` / `status` go through the socket on the same client. Do **not** kill watch to send. Do not open a second client.
 
 `watch` listens on `mode=secretary` only, queues `out/secretary-queue.jsonl`, POSTs the webhook, and on startup backfills inbound after the last outgoing. Report chats (`mode=report`) are ignored and send-blocked.
 

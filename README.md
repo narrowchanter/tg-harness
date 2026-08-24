@@ -31,6 +31,13 @@ curl --socks5-hostname 127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace
 
 Direct Telethon `connect()` should still fail. Proxied `connect()` should work.
 
+```bash
+# keep SOCKS :40000 (real WARP) and exactly one secretary watch
+./scripts/supervise.sh
+```
+
+Do not put a dummy local SOCKS on `:40000`. Port up without WARP still fails MTProto.
+
 ### Login (once)
 
 ```bash
@@ -56,7 +63,7 @@ TG_HARNESS_ROLE=secretary python -m tg_harness.cli send "Example friend" --text 
 TG_HARNESS_ROLE=secretary python -m tg_harness.cli watch
 ```
 
-Keep `watch` running (secretary role). `pull` / `send` / `status` go through `watch.sock` so you never open a second Telethon client. Unknown chats are refused. Reporter cannot `send` and cannot pull secretary chats. Secretary cannot pull or send report chats. Live Telegram titles must match `config.toml`. `send` with watch down needs `--direct` (human escape). In 1:1s omit `--reply-to` unless a quote is needed. `watch` POSTs secretary inbound to `webhook_url` / `SECRETARY_WEBHOOK_URL`.
+Keep `watch` running (secretary role), preferably under `scripts/supervise.sh`. `watch.sock` is request/response Unix IPC, not a WebSocket. The Telegram pipe is Telethon. `pull` / `send` / `status` go through the socket so you never open a second Telethon client. If `watch` is unsupervised it dies overnight and the secretary never wakes. Unknown chats are refused. Reporter cannot `send` and cannot pull secretary chats. Secretary cannot pull or send report chats. Live Telegram titles must match `config.toml`. `send` with watch down needs `--direct` (human escape). In 1:1s omit `--reply-to` unless a quote is needed. `watch` POSTs secretary inbound to `webhook_url` / `SECRETARY_WEBHOOK_URL`.
 
 ## Two agents
 
