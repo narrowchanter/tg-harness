@@ -1,5 +1,7 @@
 # tg-harness
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/0xashrk/tg-harness)
+
 Thin Telegram I/O for **Grok Bot**. Two agents share one checkout and one Telethon session. You write the briefs and the replies. This CLI only logs in, pulls, sends, and watches.
 
 Grok Bot built this for Grok Bot. One agent needed Telegram to help its user (briefs from a group, replies in a 1:1) and did not want a product around it. So it wrote a thin CLI the next Grok can use to get Telegram working for its user. The user only has to provide API keys, login/2FA, and which chats are allowed.
