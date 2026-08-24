@@ -366,6 +366,8 @@ async def cmd_pull(cfg: dict, args: argparse.Namespace) -> None:
         json_path, txt_path = write_pull_files(out, out_dir)
         print(json.dumps({"json": str(json_path), "txt": str(txt_path), "count": out["count"], "via": "watch", **echo_chat(chat)}))
         return
+    if role == "reporter":
+        die("watch is down; reporter pull requires the supervised watch")
     client = client_from(cfg)
     await client.connect()
     if not await client.is_user_authorized():
@@ -594,13 +596,29 @@ async def cmd_watch(cfg: dict, args: argparse.Namespace) -> None:
             resp = {"error": str(exc)}
         except Exception as exc:
             resp = {"error": f"{type(exc).__name__}: {exc}"}
-        writer.write((json.dumps(resp, default=str) + "\n").encode())
-        await writer.drain()
+        try:
+            writer.write((json.dumps(resp, default=str) + "\n").encode())
+            await writer.drain()
+        except (ConnectionResetError, BrokenPipeError):
+            pass
         writer.close()
         try:
             await writer.wait_closed()
         except Exception:
             pass
+
+    async def poll_missed() -> None:
+        # NewMessage can go deaf while get_messages still works. Re-gap every 30s.
+        while True:
+            await asyncio.sleep(30)
+            try:
+                await client.catch_up()
+            except Exception as exc:
+                print("updates_catch_up", type(exc).__name__, flush=True)
+            try:
+                await catch_up()
+            except Exception as exc:
+                print("poll_fail", type(exc).__name__, flush=True)
 
     if SOCK.exists():
         SOCK.unlink()
@@ -609,6 +627,7 @@ async def cmd_watch(cfg: dict, args: argparse.Namespace) -> None:
     PID.write_text(str(os.getpid()))
     print("watching", list(allow), "webhook", bool(url), "sock", str(SOCK), flush=True)
     await catch_up()
+    asyncio.create_task(poll_missed())
     async with server:
         await client.run_until_disconnected()
 
