@@ -16,4 +16,4 @@ session_path = "user.session"
 # id = 987654321
 # title = "Example friend"
 # mode = "secretary"       # secretary = may send
-# auto = false             # true = send without asking if one clear target
+# auto = true              # default send. Set false to draft-and-wait on this chat.
