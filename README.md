@@ -37,7 +37,7 @@ flowchart LR
   R -->|brief in Grok chat only| You[You]
 ```
 
-**Reporter mode** (`TG_HARNESS_ROLE=reporter`): a weekday routine. `pull "AI News" --hours 24`, read `out/<id>.txt`, write the newsletter. If it tries `send`, or `pull "Sam"`, the CLI exits. It never opens Telethon itself; the request goes through `watch.sock`.
+**Reporter mode** (`TG_HARNESS_ROLE=reporter`): a weekday routine. `pull "AI News" --hours 24`, read `out/<id>.txt`, write the newsletter. If it tries `send`, `pull "Sam"`, or pull while the supervised watch is down, the CLI exits. It never opens Telethon itself; the request goes through `watch.sock`.
 
 **Secretary mode** (`TG_HARNESS_ROLE=secretary`): `watch` stays up. Sam texts → webhook wakes the secretary Grok → it `pull`s Sam, drafts in your voice, `send`s. It must not touch `AI News`. Keep `watch` supervised or it dies overnight and Sam's texts never arrive.
 
@@ -146,7 +146,7 @@ Then start exactly one watch and keep it alive:
 ./scripts/supervise.sh
 ```
 
-That loop keeps real WARP on `:40000` and one `TG_HARNESS_ROLE=secretary` watch. If `watch` dies overnight, the secretary never wakes. Reporter `pull` goes through `watch.sock` so nobody opens a second Telethon client.
+That loop keeps real WARP on `:40000` and one `TG_HARNESS_ROLE=secretary` watch. If `watch` dies overnight, the secretary never wakes. Reporter `pull` goes through `watch.sock` and fails closed while the socket is down, so nobody opens a second Telethon client.
 
 On the **reporter** Grok, create a weekday morning routine: `status`, `pull` each `mode=report` chat, write the brief in that Grok chat. Never `send`.
 

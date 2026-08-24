@@ -366,6 +366,8 @@ async def cmd_pull(cfg: dict, args: argparse.Namespace) -> None:
         json_path, txt_path = write_pull_files(out, out_dir)
         print(json.dumps({"json": str(json_path), "txt": str(txt_path), "count": out["count"], "via": "watch", **echo_chat(chat)}))
         return
+    if role == "reporter":
+        die("watch is down; reporter pull requires the supervised watch")
     client = client_from(cfg)
     await client.connect()
     if not await client.is_user_authorized():

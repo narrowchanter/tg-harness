@@ -1,25 +1,39 @@
 #!/usr/bin/env bash
 # Keep WARP/SOCKS :40000 and one secretary watch up. Do not change default route.
 # Real WARP proxy only. A dummy local SOCKS on :40000 looks "up" while MTProto still fails.
-set -u
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$ROOT/out"
 LOG="$OUT/supervisor.log"
 WATCH_LOG="$OUT/watch.log"
 SOCKS_LOG="$OUT/socks.log"
 PIDFILE="$OUT/supervisor.pid"
+LOCKFILE="$OUT/supervisor.lock"
 WATCH_PIDFILE="$ROOT/watch.pid"
 SOCK="$ROOT/watch.sock"
 VENV="$ROOT/.venv/bin/python"
 export TG_HARNESS_ROLE=secretary
-mkdir -p "$OUT"
-echo $$ > "$PIDFILE"
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" >> "$LOG"; }
 
 socks_up() {
-  ss -lnt 2>/dev/null | grep -q '127.0.0.1:40000' && return 0
-  ss -lnt 2>/dev/null | grep -qE ':40000\b' && return 0
-  return 1
+  command -v curl >/dev/null 2>&1 || return 1
+  curl --silent --show-error --fail \
+    --connect-timeout 5 --max-time 10 \
+    --socks5-hostname 127.0.0.1:40000 \
+    https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null |
+    grep -qE '^warp=(on|plus)\r?$'
+}
+
+acquire_lock() {
+  if ! command -v flock >/dev/null 2>&1; then
+    log "FAILED to start supervisor: flock is required"
+    return 1
+  fi
+  exec 9>"$LOCKFILE"
+  if ! flock -n 9; then
+    log "supervisor already running; refusing duplicate"
+    return 1
+  fi
 }
 
 ensure_socks() {
@@ -107,9 +121,22 @@ ensure_watch() {
   return 1
 }
 
-log "supervisor start pid=$$ root=$ROOT"
-while true; do
-  ensure_socks || true
-  ensure_watch || true
-  sleep 15
-done
+main() {
+  mkdir -p "$OUT"
+  acquire_lock || return 1
+  echo $$ > "$PIDFILE"
+  trap 'rm -f "$PIDFILE"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  log "supervisor start pid=$$ root=$ROOT"
+  while true; do
+    ensure_socks || true
+    ensure_watch || true
+    sleep 15
+  done
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
