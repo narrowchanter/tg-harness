@@ -43,18 +43,24 @@ flowchart LR
 
 Role is the **process** env var, not a line in `.env`. Same files, two Groks, opposite allowlists.
 
-## Grok Bot setup
+## Hand this to a Grok
 
-Point **two different Groks** at the same checkout. Role is per process (`TG_HARNESS_ROLE`), never in the shared `.env`.
+This is the USP: one Grok stands up the checkout, logs you in, lets you pick chats, then creates **two** Groks (reporter + secretary). The installer Grok must not invent SMS codes, 2FA passwords, or chat ids.
 
-1. **Reporter** — weekday group briefs. `TG_HARNESS_ROLE=reporter`. Can `pull` `mode=report` chats only. `send` is a hard error. Copy [AGENTS_REPORTER.md](AGENTS_REPORTER.md) onto that Grok.
-2. **Secretary** — allowlisted 1:1 replies. `TG_HARNESS_ROLE=secretary`. Can `pull` / `send` / `watch` `mode=secretary` chats only. Copy [AGENTS_SECRETARY.md](AGENTS_SECRETARY.md) onto that Grok. Paste the secretary inbound webhook URL + sender key into its routine panel.
+### 1. Two agents
 
-One live Telethon client. The secretary keeps `watch` up (use `scripts/supervise.sh`). Reporter `pull` goes through `watch.sock` so it never opens a second client.
+Create two teammates (CreateAgent, or ask the human). Same shared computer / same `tg-harness` checkout. Opposite roles.
 
-Full recipe: [SKILL.md](SKILL.md)
+- **Reporter** — paste [AGENTS_REPORTER.md](AGENTS_REPORTER.md) into its description. It only ever `export TG_HARNESS_ROLE=reporter`. Weekday brief routine later.
+- **Secretary** — paste [AGENTS_SECRETARY.md](AGENTS_SECRETARY.md) into its description. It only ever `export TG_HARNESS_ROLE=secretary`. Webhook inbound routine later.
 
-## One-time on the box
+Do not put `TG_HARNESS_ROLE` in `.env`. The human deletes an agent from the sidebar (right-click the row → Delete) if you created a spare.
+
+Full CLI recipe: [SKILL.md](SKILL.md)
+
+### 2. Checkout on the box
+
+On **your** computer (the Grok box), not the human's Mac:
 
 ```bash
 git clone https://github.com/0xashrk/tg-harness
@@ -66,9 +72,55 @@ cp .env.example .env
 cp config.example.toml config.toml
 ```
 
-Get your own `api_id` / `api_hash` at https://my.telegram.org/auth → API development tools. Put them in `.env`. Sharing one app id means Telegram can ban that app for everyone.
+Ask the human for their own `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` from https://my.telegram.org/auth → API development tools. Write them into `.env`. Never commit `.env`. Never print `api_hash`. Sharing one app id means Telegram can ban that app for everyone.
 
-Fill `config.toml` with the chats each Grok may touch:
+Ask for the login phone (`+44…`). You may put `TELEGRAM_PHONE` in `.env` for `login` only.
+
+### 3. Proxy if Telegram is blocked
+
+Try a connect. If Telethon handshake fails (`IncompleteReadError`), use Cloudflare WARP in **proxy mode** on `127.0.0.1:40000`. Do **not** change the default route.
+
+```bash
+# warp-svc; warp-cli mode proxy; warp-cli connect
+curl --socks5-hostname 127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace
+```
+
+Do not put a dummy local SOCKS on `:40000`. Port up without WARP still fails MTProto.
+
+### 4. Login, SMS code, 2FA
+
+`watch` must be **down** for login. Then:
+
+```bash
+python -m tg_harness.cli login --phone +15555550100
+```
+
+What happens:
+
+1. Telegram texts (or app-prompts) a login code to that phone.
+2. The CLI prints `Telegram login code:` — the **human** types it. You do not invent it, guess it, or ask them to paste it into the Grok chat if you can avoid it. Prefer the terminal prompt. Do not pass `--code` unless they insist.
+3. If that account has 2FA, Telethon raises `SessionPasswordNeededError` and the CLI prints `2FA cloud password:`. That is the Telegram **cloud password**, not the SMS code. The human types it at the prompt. Never put it in chat, memory, git, or `--password` unless they insist. Never store it.
+4. Success prints `authorized as <user id>` and writes `user.session`. Never commit or print the session.
+
+Already logged in → `already authorized as <id>` and it exits. Check anytime with `TG_HARNESS_ROLE=secretary python -m tg_harness.cli status` (watch down) or via the sock once watch is up.
+
+### 5. Human picks the chats
+
+Still **before** `watch` is up, list the real Telegram book:
+
+```bash
+TG_HARNESS_ROLE=secretary python -m tg_harness.cli chats
+```
+
+That dumps every dialog: `id`, live `title`, `username`, `kind` (user vs group). `TG_HARNESS_ROLE=reporter python -m tg_harness.cli chats` is **not** this list — reporter only sees chats already marked `mode=report` in `config.toml`.
+
+Show the list to the human. Ask, per chat they care about:
+
+- **report** — groups you want a brief from. Reporter may `pull`. Nobody sends here.
+- **secretary** — 1:1s / small chats the secretary may answer as the human.
+- skip — leave it out. Unknown chats are refused later.
+
+Write `config.toml` with the **live title** Telegram just returned (titles must match or send/pull dies):
 
 ```toml
 [[chats]]
@@ -82,34 +134,21 @@ title = "Example friend"
 mode = "secretary"
 ```
 
-Live Telegram titles must match. Unknown chats are refused. Reporter cannot see secretary chats and vice versa.
+Do not invent ids. Do not copy ids from this README. If they change their mind later, `chats` again (secretary, or via watch) and edit `config.toml`.
 
-### If MTProto is blocked
+### 6. Wake the secretary, then supervise
 
-Do **not** change the machine default route. Use Cloudflare WARP in **proxy mode** on `127.0.0.1:40000` (those values are already in `config.example.toml`).
+On the **secretary** Grok, create a webhook routine (inbound). The human copies that routine's URL (and sender key) from the routine panel — you never need the key in chat. Put the URL in `config.toml` as `webhook_url` or in `.env` as `SECRETARY_WEBHOOK_URL`.
 
-```bash
-# warp-svc; warp-cli mode proxy; warp-cli connect
-curl --socks5-hostname 127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace
-```
-
-Do not put a dummy local SOCKS on `:40000`. Port up without WARP still fails MTProto.
-
-### Login (once)
-
-```bash
-python -m tg_harness.cli login --phone +15555550100
-```
-
-SMS/app code, then 2FA if asked. Writes `user.session`. Never commit it, never print it.
-
-Then start the secretary watch and leave it supervised:
+Then start exactly one watch and keep it alive:
 
 ```bash
 ./scripts/supervise.sh
 ```
 
-That loop keeps real WARP on `:40000` and exactly one `TG_HARNESS_ROLE=secretary` watch. If `watch` dies overnight, the secretary never wakes.
+That loop keeps real WARP on `:40000` and one `TG_HARNESS_ROLE=secretary` watch. If `watch` dies overnight, the secretary never wakes. Reporter `pull` goes through `watch.sock` so nobody opens a second Telethon client.
+
+On the **reporter** Grok, create a weekday morning routine: `status`, `pull` each `mode=report` chat, write the brief in that Grok chat. Never `send`.
 
 ## What each Grok runs
 
