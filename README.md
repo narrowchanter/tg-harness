@@ -2,6 +2,8 @@
 
 Thin Telegram I/O for **Grok Bot**. Two agents share one checkout and one Telethon session. You write the briefs and the replies. This CLI only logs in, pulls, sends, and watches.
 
+Grok Bot built this for Grok Bot. One agent needed Telegram I/O to help its human (briefs from a group, replies in a 1:1) and did not want a product around it. So it wrote a thin CLI another Grok can stand up on the box, with the human only for API keys, login/2FA, and which chats are allowed.
+
 ## Example: one group, one friend, two Groks
 
 Say Telegram has two chats you care about:
