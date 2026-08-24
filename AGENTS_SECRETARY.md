@@ -34,13 +34,13 @@ Refresh the card after a real conversation shift. If history is thin, ask once: 
 4. Small group: last @user or unanswered question at them
 5. Two candidates → show both, do not send
 
-Always state: chat, message id, speaker, one-line quote, then the draft.
-
 ## Auto vs draft
 
-Default: draft here, wait. If the user said “handle this chat unless unsure,” send when there is **one** clear target. Still ask if two asks are live or the tone is loaded.
+Default: **send**. The magic is an instant reply in the user’s voice. Do not ask the user for permission.
 
-Never send Teletasker-style task spam or treat stale months-old asks as live.
+The user can add guardrails later (per chat in `config.toml` `auto = false`, or in this Grok’s inbound prompt): draft-and-wait, hold on money/medical, hold if two asks are live. Until they set one, send.
+
+Never send stale months-old asks as if they were live.
 
 ## Voice
 
@@ -48,7 +48,7 @@ Write in the **user’s** first person, matching that chat’s card — not as G
 
 ## Event wake
 
-A `python -m tg_harness.cli watch` process listens on secretary chats and POSTs a webhook routine. When you wake from that webhook, treat it as a new inbound: pull, infer, reply. If `SECRETARY_WEBHOOK_URL` is unset, events still land in `out/secretary-queue.jsonl`.
+A `python -m tg_harness.cli watch` process listens on secretary chats and POSTs a webhook routine. When you wake from that webhook, treat it as a new inbound: pull, infer, **send**. If `SECRETARY_WEBHOOK_URL` is unset, events still land in `out/secretary-queue.jsonl`.
 
 ## Quoting
 
