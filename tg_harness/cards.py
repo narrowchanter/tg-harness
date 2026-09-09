@@ -95,17 +95,17 @@ def render_card(
         f"title: {_yaml_str(title)}",
         f"relationship: {rel}",
         f"voice: {_yaml_str(voice)}",
-        "taboos:",
     ]
     if taboos:
+        lines.append("taboos:")
         lines.extend(f"  - {_yaml_str(t)}" for t in taboos)
     else:
-        lines.append("  []")
-    lines.append("open_loops:")
+        lines.append("taboos: []")
     if open_loops:
+        lines.append("open_loops:")
         lines.extend(f"  - {_yaml_str(t)}" for t in open_loops)
     else:
-        lines.append("  []")
+        lines.append("open_loops: []")
     lines.append(f"updated_at: {_yaml_str(when)}")
     lines.append("---")
     body = (body or "").rstrip()
@@ -229,6 +229,11 @@ def _parse_simple_yaml(blob: str) -> dict:
                 items: list[str] = []
                 if rest == "":
                     i += 1
+                    # skip explicit empty marker if present
+                    if i < len(lines) and lines[i].strip() in ("[]", "- []"):
+                        i += 1
+                        out[key] = []
+                        continue
                     while i < len(lines) and lines[i].startswith("  - "):
                         items.append(_unquote(lines[i][4:].strip()))
                         i += 1
