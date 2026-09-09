@@ -75,6 +75,18 @@ def refuse_watch(role: str) -> str | None:
     return None
 
 
+def refuse_card(role: str, chat: dict | None) -> str | None:
+    if role == "reporter":
+        return "reporter cannot use cards"
+    if role != "secretary":
+        return "card requires TG_HARNESS_ROLE=secretary"
+    if chat is None:
+        return "chat is not in config.toml"
+    if chat.get("mode") != "secretary":
+        return "cards only for mode=secretary chats"
+    return None
+
+
 def refuse_live_title(chat: dict, live_title: str | None) -> str | None:
     expected = (chat.get("title") or "").strip()
     if not expected:

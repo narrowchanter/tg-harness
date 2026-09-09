@@ -8,7 +8,8 @@ Same `tg-harness` CLI as the reporter, with `TG_HARNESS_ROLE=secretary` in **thi
 
 ```bash
 export TG_HARNESS_ROLE=secretary
-python -m tg_harness.cli pull "<chat>" --hours 24   # or more hours for a first relationship card
+python -m tg_harness.cli card show "<chat>"
+python -m tg_harness.cli pull "<chat>" --hours 48   # keep recent depth; deep pull only to seed a card
 python -m tg_harness.cli send "<chat>" --text "..."
 # only if a specific older message must be quoted:
 python -m tg_harness.cli send "<chat>" --reply-to <message_id> --text "..."
@@ -18,13 +19,20 @@ Keep `watch` up (run `scripts/supervise.sh` so WARP `:40000` and one secretary w
 
 ## Who they are
 
-Last-20 is for *this* ping. Relationship is a card you write once per chat:
+Relationship is a **card** on disk — not only agent memory.
 
-1. First time on the allowlist: `pull` months of history (`--hours 2160` or several pulls).
-2. Write a short memory: who they are, friend vs work, how the user talks to them, taboos, open loops.
-3. Each reply stacks: (a) the user’s voice, (b) that card, (c) the new message + last 20.
+```bash
+python -m tg_harness.cli card show "<chat>"
+python -m tg_harness.cli card write "<chat>" --relationship friend --voice "…" --loop "…"
+```
 
-Refresh the card after a real conversation shift. If history is thin, ask once: friend or work?
+Live path: `out/cards/<chat_id>.md` (gitignored). Schema + fake example: `cards/README.md`, `cards/example.md`.
+
+1. First time on the allowlist: deep `pull` (`--hours 2160` or several pulls), then `card write`.
+2. Each inbound reply stacks: (a) the user’s voice, (b) that card if present, (c) the new message + **recent pull**.
+3. Refresh the card after a real conversation shift (new open loop, tone change, taboo).
+
+Cards **add** durable context. They do **not** replace the recent history pull — keep the usual ~48h (or whatever depth you already use). Do not shrink the pull to “save time.”
 
 ## Targeting
 
@@ -48,7 +56,15 @@ Write in the **user’s** first person, matching that chat’s card — not as G
 
 ## Event wake
 
-A `python -m tg_harness.cli watch` process listens on secretary chats and POSTs a webhook routine. When you wake from that webhook, treat it as a new inbound: pull, infer, **send**. If `SECRETARY_WEBHOOK_URL` is unset, events still land in `out/secretary-queue.jsonl`.
+A `python -m tg_harness.cli watch` process listens on secretary chats and POSTs a webhook routine. When you wake from that webhook:
+
+1. Read `out/secretary-queue.jsonl` / the webhook payload.
+2. `card show` for that chat (ok if missing).
+3. `pull` recent history at the **usual depth** (~48h) — do not shorten because a card exists.
+4. Infer and **send** (unless a guardrail says hold).
+5. Tell the user one line what you did. Update the card if open loops / tone shifted.
+
+If `SECRETARY_WEBHOOK_URL` is unset, events still land in `out/secretary-queue.jsonl`.
 
 ## Quoting
 

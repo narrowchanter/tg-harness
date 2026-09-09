@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""login | pull | send | chats | watch — one live Telethon client when watch is up."""
+"""login | pull | send | chats | card | watch — one live Telethon client when watch is up."""
 
 from __future__ import annotations
 
@@ -22,10 +22,17 @@ def load_dotenv(path) -> None:
         return
     _load(path)
 
+from tg_harness.cards import (
+    CardError,
+    format_card,
+    load_card,
+    update_card,
+)
 from tg_harness.policy import (
     PolicyError,
     chat_by_id,
     echo_chat,
+    refuse_card,
     refuse_live_title,
     refuse_pull,
     refuse_send,
@@ -632,6 +639,55 @@ async def cmd_watch(cfg: dict, args: argparse.Namespace) -> None:
         await client.run_until_disconnected()
 
 
+def cmd_card(cfg: dict, args: argparse.Namespace) -> None:
+    """Show or write a relationship card. Secretary + mode=secretary only."""
+    role = require_role(cfg)
+    chat = require_chat(cfg, args.chat)
+    err = refuse_card(role, chat)
+    if err:
+        die(err)
+    action = args.card_cmd
+    if action == "show":
+        card = load_card(ROOT, int(chat["id"]))
+        if card is None:
+            die(f"no card for {chat['id']} at {ROOT / 'out' / 'cards' / (str(int(chat['id'])) + '.md')}", 2)
+        print(format_card(card), end="")
+        return
+    if action != "write":
+        die(f"unknown card action {action!r}")
+
+    updates = {
+        "chat_id": int(chat["id"]),
+        # None keeps an existing card title when config has no title override.
+        "title": chat.get("title") or None,
+        "relationship": args.relationship,
+        "voice": args.voice,
+        "body": None,
+        "taboos": None,
+        "open_loops": None,
+        "add_loops": list(args.loop or []),
+        "add_taboos": list(args.taboo or []),
+    }
+    if args.body is not None:
+        updates["body"] = args.body
+    elif args.body_file:
+        updates["body"] = Path(args.body_file).read_text(encoding="utf-8")
+    if args.replace_loops:
+        updates["open_loops"] = list(args.loop or [])
+        updates["add_loops"] = []
+    if args.replace_taboos:
+        updates["taboos"] = list(args.taboo or [])
+        updates["add_taboos"] = []
+
+    # Locked read-modify-write so concurrent card write appends cannot drop each other.
+    try:
+        path, merged = update_card(ROOT, int(chat["id"]), updates)
+    except CardError as exc:
+        die(str(exc))
+    print(json.dumps({"path": str(path), "chat_id": int(chat["id"]), "title": merged.get("title"), "via": "card"}, ensure_ascii=False))
+
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tg", description="Thin Telegram I/O for agents")
     p.add_argument("--config", default=str(ROOT / "config.toml"))
@@ -662,6 +718,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     watch = sub.add_parser("watch", help="listen for secretary inbound and POST webhook")
     watch.add_argument("--webhook")
+
+    card = sub.add_parser("card", help="show or write a relationship card (secretary only)")
+    card_sub = card.add_subparsers(dest="card_cmd", required=True)
+    show = card_sub.add_parser("show", help="print card for a secretary chat")
+    show.add_argument("chat", help="chat id or title from config.toml")
+    write = card_sub.add_parser("write", help="create or update a card")
+    write.add_argument("chat", help="chat id or title from config.toml")
+    write.add_argument("--relationship", choices=["friend", "family", "work", "other"])
+    write.add_argument("--voice")
+    write.add_argument("--loop", action="append", default=[], help="append an open loop (repeatable)")
+    write.add_argument("--taboo", action="append", default=[], help="append a taboo (repeatable)")
+    write.add_argument("--replace-loops", action="store_true", help="replace open_loops with --loop values")
+    write.add_argument("--replace-taboos", action="store_true", help="replace taboos with --taboo values")
+    write.add_argument("--body", help="freeform body text")
+    write.add_argument("--body-file", help="read freeform body from a file")
     return p
 
 
@@ -669,6 +740,9 @@ def main() -> None:
     load_dotenv(ROOT / ".env")
     args = build_parser().parse_args()
     cfg = load_config(Path(args.config))
+    if args.cmd == "card":
+        cmd_card(cfg, args)
+        return
     handler = {
         "login": cmd_login,
         "status": cmd_status,
