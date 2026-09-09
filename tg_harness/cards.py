@@ -182,10 +182,16 @@ def format_card(card: dict) -> str:
         "taboos:",
     ]
     taboos = card.get("taboos") or []
-    lines.extend(f"  - {t}" for t in taboos) if taboos else lines.append("  (none)")
+    if taboos:
+        lines.extend(f"  - {t}" for t in taboos)
+    else:
+        lines.append("  (none)")
     lines.append("open_loops:")
     loops = card.get("open_loops") or []
-    lines.extend(f"  - {t}" for t in loops) if loops else lines.append("  (none)")
+    if loops:
+        lines.extend(f"  - {t}" for t in loops)
+    else:
+        lines.append("  (none)")
     body = (card.get("body") or "").rstrip()
     if body:
         lines.append("body:")

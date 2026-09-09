@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""login | pull | send | chats | watch — one live Telethon client when watch is up."""
+"""login | pull | send | chats | card | watch — one live Telethon client when watch is up."""
 
 from __future__ import annotations
 
@@ -22,10 +22,18 @@ def load_dotenv(path) -> None:
         return
     _load(path)
 
+from tg_harness.cards import (
+    CardError,
+    format_card,
+    load_card,
+    merge_card,
+    write_card,
+)
 from tg_harness.policy import (
     PolicyError,
     chat_by_id,
     echo_chat,
+    refuse_card,
     refuse_live_title,
     refuse_pull,
     refuse_send,
@@ -632,6 +640,55 @@ async def cmd_watch(cfg: dict, args: argparse.Namespace) -> None:
         await client.run_until_disconnected()
 
 
+def cmd_card(cfg: dict, args: argparse.Namespace) -> None:
+    """Show or write a relationship card. Secretary + mode=secretary only."""
+    role = require_role(cfg)
+    chat = require_chat(cfg, args.chat)
+    err = refuse_card(role, chat)
+    if err:
+        die(err)
+    action = args.card_cmd
+    if action == "show":
+        card = load_card(ROOT, int(chat["id"]))
+        if card is None:
+            die(f"no card for {chat['id']} at {ROOT / 'out' / 'cards' / (str(int(chat['id'])) + '.md')}", 2)
+        print(format_card(card), end="")
+        return
+    if action != "write":
+        die(f"unknown card action {action!r}")
+
+    existing = load_card(ROOT, int(chat["id"]))
+    updates = {
+        "chat_id": int(chat["id"]),
+        "title": chat.get("title") or (existing or {}).get("title") or "",
+        "relationship": args.relationship,
+        "voice": args.voice,
+        "body": None,
+        "taboos": None,
+        "open_loops": None,
+        "add_loops": list(args.loop or []),
+        "add_taboos": list(args.taboo or []),
+    }
+    if args.body is not None:
+        updates["body"] = args.body
+    elif args.body_file:
+        updates["body"] = Path(args.body_file).read_text(encoding="utf-8")
+    if args.replace_loops:
+        updates["open_loops"] = list(args.loop or [])
+        updates["add_loops"] = []
+    if args.replace_taboos:
+        updates["taboos"] = list(args.taboo or [])
+        updates["add_taboos"] = []
+
+    try:
+        merged = merge_card(existing, updates)
+        path = write_card(ROOT, merged)
+    except CardError as exc:
+        die(str(exc))
+    print(json.dumps({"path": str(path), "chat_id": int(chat["id"]), "title": merged.get("title"), "via": "card"}, ensure_ascii=False))
+
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tg", description="Thin Telegram I/O for agents")
     p.add_argument("--config", default=str(ROOT / "config.toml"))
@@ -669,6 +726,9 @@ def main() -> None:
     load_dotenv(ROOT / ".env")
     args = build_parser().parse_args()
     cfg = load_config(Path(args.config))
+    if args.cmd == "card":
+        cmd_card(cfg, args)
+        return
     handler = {
         "login": cmd_login,
         "status": cmd_status,
