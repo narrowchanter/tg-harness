@@ -719,6 +719,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     watch = sub.add_parser("watch", help="listen for secretary inbound and POST webhook")
     watch.add_argument("--webhook")
+
+    card = sub.add_parser("card", help="show or write a relationship card (secretary only)")
+    card_sub = card.add_subparsers(dest="card_cmd", required=True)
+    show = card_sub.add_parser("show", help="print card for a secretary chat")
+    show.add_argument("chat", help="chat id or title from config.toml")
+    write = card_sub.add_parser("write", help="create or update a card")
+    write.add_argument("chat", help="chat id or title from config.toml")
+    write.add_argument("--relationship", choices=["friend", "family", "work", "other"])
+    write.add_argument("--voice")
+    write.add_argument("--loop", action="append", default=[], help="append an open loop (repeatable)")
+    write.add_argument("--taboo", action="append", default=[], help="append a taboo (repeatable)")
+    write.add_argument("--replace-loops", action="store_true", help="replace open_loops with --loop values")
+    write.add_argument("--replace-taboos", action="store_true", help="replace taboos with --taboo values")
+    write.add_argument("--body", help="freeform body text")
+    write.add_argument("--body-file", help="read freeform body from a file")
     return p
 
 
