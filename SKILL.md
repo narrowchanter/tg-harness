@@ -15,6 +15,8 @@ python -m tg_harness.cli status
 python -m tg_harness.cli pull "Chat" --hours 24
 python -m tg_harness.cli send "Chat" --text "..."          # secretary role only
 python -m tg_harness.cli send "Chat" --reply-to <id> --text "..."
+python -m tg_harness.cli card show "Chat"                  # secretary role only
+python -m tg_harness.cli card write "Chat" --relationship friend --voice "…"
 python -m tg_harness.cli watch                             # secretary role only
 ```
 
@@ -27,6 +29,10 @@ The CLI enforces this: `TG_HARNESS_ROLE=reporter` cannot `send` or pull secretar
 WARP proxy mode on `127.0.0.1:40000` if MTProto is blocked. Do not change the default route.
 
 Forks use their own `api_id` / `api_hash`. Do not ship session, `.env`, webhook key, or `watch.sock`.
+
+## Relationship cards
+
+Secretary-only durable notes per allowlisted chat: `out/cards/<chat_id>.md` (gitignored). Schema in `cards/README.md`. On webhook wake: load card if present, then pull recent history at the usual depth (~48h) — cards do not replace that pull.
 
 ## Roles
 
