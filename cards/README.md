@@ -18,7 +18,8 @@ Markdown with YAML frontmatter:
 ---
 chat_id: 987654321
 title: "Example friend"
-relationship: friend   # friend | family | work | other
+# relationship: friend | family | work | other
+relationship: friend
 voice: "short mate texts, no emoji"
 taboos: []
 open_loops:

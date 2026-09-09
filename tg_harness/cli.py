@@ -26,8 +26,7 @@ from tg_harness.cards import (
     CardError,
     format_card,
     load_card,
-    merge_card,
-    write_card,
+    update_card,
 )
 from tg_harness.policy import (
     PolicyError,
@@ -657,10 +656,10 @@ def cmd_card(cfg: dict, args: argparse.Namespace) -> None:
     if action != "write":
         die(f"unknown card action {action!r}")
 
-    existing = load_card(ROOT, int(chat["id"]))
     updates = {
         "chat_id": int(chat["id"]),
-        "title": chat.get("title") or (existing or {}).get("title") or "",
+        # None keeps an existing card title when config has no title override.
+        "title": chat.get("title") or None,
         "relationship": args.relationship,
         "voice": args.voice,
         "body": None,
@@ -680,9 +679,9 @@ def cmd_card(cfg: dict, args: argparse.Namespace) -> None:
         updates["taboos"] = list(args.taboo or [])
         updates["add_taboos"] = []
 
+    # Locked read-modify-write so concurrent card write appends cannot drop each other.
     try:
-        merged = merge_card(existing, updates)
-        path = write_card(ROOT, merged)
+        path, merged = update_card(ROOT, int(chat["id"]), updates)
     except CardError as exc:
         die(str(exc))
     print(json.dumps({"path": str(path), "chat_id": int(chat["id"]), "title": merged.get("title"), "via": "card"}, ensure_ascii=False))
