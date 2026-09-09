@@ -154,6 +154,10 @@ That loop keeps real WARP on `:40000` and one `TG_HARNESS_ROLE=secretary` watch.
 
 On the **reporter** Grok, create a weekday morning routine: `status`, `pull` each `mode=report` chat, write the brief in that Grok chat. Never `send`.
 
+## Relationship cards
+
+Secretary chats can keep a durable card under `out/cards/<chat_id>.md` (gitignored). See [`cards/README.md`](cards/README.md). Use `card show` / `card write` to warm voice, taboos, and open loops between wakes. Cards **add** context; they do **not** replace the recent `pull` (keep ~48h).
+
 ## What each Grok runs
 
 ```bash
@@ -165,7 +169,8 @@ python -m tg_harness.cli pull "Example group" --hours 24
 
 # Secretary Grok
 export TG_HARNESS_ROLE=secretary
-python -m tg_harness.cli pull "Example friend" --hours 24
+python -m tg_harness.cli card show "Example friend"
+python -m tg_harness.cli pull "Example friend" --hours 48
 python -m tg_harness.cli send "Example friend" --text "hello"
 # watch is already up under supervise.sh
 ```
