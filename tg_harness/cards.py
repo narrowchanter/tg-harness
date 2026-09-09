@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,6 +21,26 @@ def cards_dir(root: Path) -> Path:
 
 def card_path(root: Path, chat_id: int) -> Path:
     return cards_dir(root) / f"{int(chat_id)}.md"
+
+
+def card_lock_path(root: Path, chat_id: int) -> Path:
+    return cards_dir(root) / f"{int(chat_id)}.md.lock"
+
+
+@contextmanager
+def card_lock(root: Path, chat_id: int):
+    """Exclusive lock for the full read-modify-write of one chat's card."""
+    import fcntl
+
+    directory = cards_dir(root)
+    directory.mkdir(parents=True, exist_ok=True)
+    lock_path = card_lock_path(root, chat_id)
+    with lock_path.open("a+", encoding="utf-8") as fh:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
 
 def load_card(root: Path, chat_id: int) -> dict | None:
@@ -119,6 +142,7 @@ def render_card(
 
 
 def write_card(root: Path, card: dict) -> Path:
+    """Atomically replace the card file (temp in same dir + os.replace)."""
     path = card_path(root, int(card["chat_id"]))
     path.parent.mkdir(parents=True, exist_ok=True)
     text = render_card(
@@ -131,8 +155,32 @@ def write_card(root: Path, card: dict) -> Path:
         body=str(card.get("body") or ""),
         updated_at=card.get("updated_at"),
     )
-    path.write_text(text, encoding="utf-8")
+    # Validate before touching the live file so a bad render cannot destroy it.
+    parse_card(text, expected_id=int(card["chat_id"]))
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
     return path
+
+
+def update_card(root: Path, chat_id: int, updates: dict) -> tuple[Path, dict]:
+    """Locked load → merge → atomic write for one chat."""
+    with card_lock(root, int(chat_id)):
+        existing = load_card(root, int(chat_id))
+        merged = merge_card(existing, {**updates, "chat_id": int(chat_id)})
+        path = write_card(root, merged)
+        return path, merged
 
 
 def merge_card(existing: dict | None, updates: dict) -> dict:
@@ -203,8 +251,14 @@ def _yaml_str(value: str) -> str:
     s = str(value or "")
     if s == "":
         return '""'
-    if any(c in s for c in ":#{}\n[]'\"") or s.strip() != s:
-        esc = s.replace("\\", "\\\\").replace('"', '\\"')
+    # Always quote when escaping is needed so round-trip is lossless.
+    if any(c in s for c in ":#{}\n\r[]'\"\\") or s.strip() != s:
+        esc = (
+            s.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+        )
         return f'"{esc}"'
     return s
 
@@ -216,7 +270,7 @@ def _parse_simple_yaml(blob: str) -> dict:
     i = 0
     while i < len(lines):
         line = lines[i]
-        if not line.strip() or line.strip().startswith("#"):
+        if not line.strip() or line.lstrip().startswith("#"):
             i += 1
             continue
         if ":" not in line:
@@ -225,6 +279,9 @@ def _parse_simple_yaml(blob: str) -> dict:
         key = key.strip()
         rest = rest.strip()
         if key in ("taboos", "open_loops"):
+            # drop inline comment on same line as key if any (e.g. taboos: [] # note)
+            if "#" in rest and not (rest.startswith('"') or rest.startswith("'")):
+                rest = rest.split("#", 1)[0].strip()
             if rest in ("", "[]"):
                 items: list[str] = []
                 if rest == "":
@@ -250,6 +307,29 @@ def _parse_simple_yaml(blob: str) -> dict:
 
 def _unquote(raw: str) -> str:
     s = raw.strip()
+    # Strip unquoted inline comments: `friend   # note`
+    if s and s[0] not in "'\"" and "#" in s:
+        s = s.split("#", 1)[0].rstrip()
     if len(s) >= 2 and s[0] == s[-1] and s[0] in "'\"":
-        return s[1:-1].replace("\\\"", '"').replace("\\\\", "\\")
+        inner = s[1:-1]
+        out = []
+        i = 0
+        while i < len(inner):
+            if inner[i] == "\\" and i + 1 < len(inner):
+                nxt = inner[i + 1]
+                if nxt == "n":
+                    out.append("\n")
+                elif nxt == "r":
+                    out.append("\r")
+                elif nxt == '"':
+                    out.append('"')
+                elif nxt == "\\":
+                    out.append("\\")
+                else:
+                    out.append(nxt)
+                i += 2
+                continue
+            out.append(inner[i])
+            i += 1
+        return "".join(out)
     return s
