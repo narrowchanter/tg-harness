@@ -6,8 +6,11 @@ from tg_harness.policy import (
     chat_by_id,
     event_settings,
     is_configured_chat,
+    is_marked_user_id,
+    is_private_user_entity,
     make_event_chat,
     refuse_card,
+    refuse_event_entity,
     refuse_live_title,
     refuse_pull,
     refuse_send,
@@ -168,6 +171,42 @@ class EventResolveTests(unittest.TestCase):
     def test_title_resolve_never_event(self):
         with self.assertRaises(PolicyError):
             resolve_chat(EVENT_CFG, "Stranger Name")
+
+
+class EventPrivateUserTests(unittest.TestCase):
+    def test_reject_negative_group_id(self):
+        # Report group id=12345; resolve('-12345') must not become an event secretary chat.
+        with self.assertRaises(PolicyError) as cm:
+            resolve_chat(EVENT_CFG, "-12345")
+        self.assertIn("private user", str(cm.exception))
+        with self.assertRaises(PolicyError):
+            chat_by_id(EVENT_CFG, -12345)
+        with self.assertRaises(PolicyError):
+            resolve_chat(EVENT_CFG, "-10012345")
+
+    def test_marked_user_id_helper(self):
+        self.assertTrue(is_marked_user_id(999))
+        self.assertFalse(is_marked_user_id(0))
+        self.assertFalse(is_marked_user_id(-12345))
+
+    def test_refuse_event_entity_requires_user(self):
+        chat = make_event_chat(999)
+
+        class User:
+            pass
+
+        class Channel:
+            pass
+
+        self.assertTrue(is_private_user_entity(User()))
+        self.assertFalse(is_private_user_entity(Channel()))
+        self.assertIsNone(refuse_event_entity(chat, User()))
+        self.assertIn("private users", refuse_event_entity(chat, Channel()) or "")
+        self.assertIn("private users", refuse_event_entity(chat, None) or "")
+        # Non-event chats are unaffected (title guard covers them elsewhere).
+        configured = {"id": 222, "title": "Example friend", "mode": "secretary"}
+        self.assertIsNone(refuse_event_entity(configured, Channel()))
+
 
 
 class EventRefuseTests(unittest.TestCase):

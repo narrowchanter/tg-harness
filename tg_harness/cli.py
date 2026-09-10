@@ -35,6 +35,7 @@ from tg_harness.policy import (
     echo_chat,
     event_settings,
     refuse_card,
+    refuse_event_entity,
     refuse_live_title,
     refuse_pull,
     refuse_send,
@@ -134,6 +135,9 @@ def guard_entity(chat: dict, entity) -> None:
     err = refuse_live_title(chat, live_title(entity))
     if err:
         die(err)
+    err = refuse_event_entity(chat, entity)
+    if err:
+        die(err)
 
 
 def watch_up() -> bool:
@@ -230,7 +234,12 @@ async def pull_chat(
     chat_id = int(chat["id"])
     entity = None
     last_err = None
-    for cid in (chat_id, int(f"-100{abs(chat_id)}") if abs(chat_id) < 10**12 else None):
+    # Event chats must stay private users: never try the -100 channel form.
+    candidates = (chat_id,)
+    if not chat.get("event"):
+        channel_form = int(f"-100{abs(chat_id)}") if abs(chat_id) < 10**12 else None
+        candidates = (chat_id, channel_form)
+    for cid in candidates:
         if cid is None:
             continue
         try:
@@ -650,8 +659,11 @@ async def cmd_watch(cfg: dict, args: argparse.Namespace) -> None:
                 else:
                     entity = await client.get_entity(int(chat["id"]))
                     live_err = refuse_live_title(chat, live_title(entity))
+                    event_err = refuse_event_entity(chat, entity)
                     if live_err:
                         resp = {"error": live_err}
+                    elif event_err:
+                        resp = {"error": event_err}
                     else:
                         msg = await client.send_message(entity, req["text"], reply_to=req.get("reply_to"))
                         resp = {"sent_id": msg.id, "reply_to": req.get("reply_to"), "via": "watch", **echo_chat(chat)}
@@ -708,7 +720,7 @@ async def cmd_watch(cfg: dict, args: argparse.Namespace) -> None:
 
 
 
-EVENT_SECTION_RE = re.compile(r"(?ms)^\[event\][^\[]*(?=^\[|\Z)")
+EVENT_SECTION_RE = re.compile(r"(?ms)^\[event\][^\n]*(?:\n(?!\[)[^\n]*)*")
 
 
 def format_event_section(*, enabled: bool, name: str = "") -> str:
@@ -726,10 +738,15 @@ def write_event_section(path: Path, *, enabled: bool, name: str = "") -> None:
     raw = path.read_text(encoding="utf-8")
     section = format_event_section(enabled=enabled, name=name)
     if EVENT_SECTION_RE.search(raw):
-        updated = EVENT_SECTION_RE.sub(section, raw, count=1)
+        # Callable replacement so backslashes in ``section`` are not re-interpreted.
+        updated = EVENT_SECTION_RE.sub(lambda _: section, raw, count=1)
     else:
         body = raw.rstrip() + "\n\n" if raw.strip() else ""
         updated = body + section
+    try:
+        tomllib.loads(updated)
+    except tomllib.TOMLDecodeError as exc:
+        die(f"refusing to write invalid [event] section: {exc}")
     path.write_text(updated, encoding="utf-8")
 
 

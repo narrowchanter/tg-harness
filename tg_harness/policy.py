@@ -58,18 +58,47 @@ def _configured_hits(cfg: dict, *, numeric: int | None = None, title_key: str | 
 
 
 def _maybe_event_chat(cfg: dict, numeric: int | None, key: str) -> dict:
-    """If event mode is on and ``numeric`` is an unknown id, synthesize a chat.
+    """If event mode is on and ``numeric`` is an unknown *user* id, synthesize a chat.
 
     Configured rows (including ``mode=report``) never take this path — callers
     only invoke us when there were zero config hits, so report chats stay
     fail-closed via normal resolve + refuse_*.
+
+    Rejects marked non-user ids (groups/channels use negative / ``-100…`` forms).
+    Callers must still verify the live Telethon entity is a private ``User``
+    before pull/send — positivity alone is not enough.
     """
     if numeric is None:
         raise PolicyError(f"chat {key!r} is not in config.toml")
     settings = event_settings(cfg)
     if not settings["enabled"]:
         raise PolicyError(f"chat {key!r} is not in config.toml")
+    if not is_marked_user_id(numeric):
+        raise PolicyError(f"event mode only allows private user ids, not {key!r}")
     return make_event_chat(numeric)
+
+
+def is_marked_user_id(chat_id: int) -> bool:
+    """True when the bare integer is not a Telegram group/channel marker.
+
+    User ids are positive. Basic groups and ``-100…`` channel forms are negative.
+    """
+    return int(chat_id) > 0
+
+
+def is_private_user_entity(entity) -> bool:
+    """True when ``entity`` is a Telethon private user (not Chat/Channel)."""
+    return type(entity).__name__ == "User"
+
+
+def refuse_event_entity(chat: dict, entity) -> str | None:
+    """For event chats, require a resolved private user before read/send."""
+    if not chat.get("event"):
+        return None
+    if entity is None or not is_private_user_entity(entity):
+        kind = type(entity).__name__ if entity is not None else "None"
+        return f"event mode only allows private users, got {kind}"
+    return None
 
 
 def chat_by_id(cfg: dict, chat_id: int) -> dict:
